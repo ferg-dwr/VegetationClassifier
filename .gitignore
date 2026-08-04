@@ -33,4 +33,4 @@ venv/
 .DS_Store
 .vscode/
 .idea/
-*.swp
+*.swp*:Zone.Identifier

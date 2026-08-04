@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vegclassifier"
+version = "0.1.0"
+description = "Invasive wetland vegetation classification from RGB drone imagery (Winter Island)"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy", "scipy", "pandas",
+    "rasterio", "geopandas", "shapely",
+    "scikit-image", "scikit-learn", "joblib", "pyyaml",
+]
+
+[project.scripts]
+vegclassifier = "vegclassifier.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+license = "MIT"
+license-files = ["LICENSE"]
