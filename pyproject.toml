@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=77"]  # >=77 required for SPDX `license` string
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,10 +7,22 @@ name = "vegclassifier"
 version = "0.1.0"
 description = "Invasive wetland vegetation classification from RGB drone imagery (Winter Island)"
 requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+# Lower bounds only. The geospatial packages (rasterio, geopandas) are best
+# installed via conda — see environment.yml — because they depend on GDAL system
+# libraries. `pip install -e .` on top of the conda env wires up the CLI.
 dependencies = [
-    "numpy", "scipy", "pandas",
-    "rasterio", "geopandas", "shapely",
-    "scikit-image", "scikit-learn", "joblib", "pyyaml",
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "pandas>=2.0",
+    "rasterio>=1.3",
+    "geopandas>=0.14",
+    "shapely>=2.0",
+    "scikit-image>=0.22",
+    "scikit-learn>=1.3",
+    "joblib>=1.3",
+    "pyyaml>=6.0",
 ]
 
 [project.scripts]
@@ -18,6 +30,3 @@ vegclassifier = "vegclassifier.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-license = "MIT"
-license-files = ["LICENSE"]

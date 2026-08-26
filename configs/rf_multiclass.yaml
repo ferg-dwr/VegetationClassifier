@@ -50,7 +50,7 @@ sampling:
   seed:            42
 
 model:
-  algo: rf                      # gm | gmm | rf | svm
+  algo: rf                     # gm | gmm | rf | svm
 
   # RandomForest
   rf_n_estimators:     300

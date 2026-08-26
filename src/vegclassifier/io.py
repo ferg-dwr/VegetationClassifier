@@ -270,6 +270,9 @@ def tile_image_and_mask(
             prefix:             Optional[str] = None,
             skip_empty:         bool          = True,
             min_valid_fraction: float         = 0.3,
+            image_subdir:       str           = "images",
+            mask_subdir:        str           = "masks",
+            mask_suffix:        str           = "_mask",
             ) -> List[TilePair] :
     """
     Tile a full-resolution image and its mask into subtiles.
@@ -303,6 +306,12 @@ def tile_image_and_mask(
     min_valid_fraction : float, default 0.3
         Minimum fraction of non-nodata pixels required to write a tile.
         Default 0.3 captures edge tiles containing Tule.
+    image_subdir, mask_subdir : str
+        Subdirectories of output_dir to write into. Defaults reproduce the
+        original flat layout; pass e.g. "rgb_images/middle" and
+        "class_masks/middle" for the site-nested production layout.
+    mask_suffix : str, default "_mask"
+        Appended to the tile stem for mask filenames.
  
     Returns
     -------
@@ -313,8 +322,8 @@ def tile_image_and_mask(
     mask_path  = Path(mask_path)
     output_dir = Path(output_dir)
  
-    img_dir = output_dir / "images"
-    msk_dir = output_dir / "masks"
+    img_dir = output_dir / image_subdir
+    msk_dir = output_dir / mask_subdir
     img_dir.mkdir(exist_ok=True, parents=True)
     msk_dir.mkdir(exist_ok=True, parents=True)
  
@@ -374,7 +383,7 @@ def tile_image_and_mask(
                 msk_profile.update({
                     "height": height, "width": width, "transform": transform
                 })
-                msk_out = msk_dir / f"{prefix}_r{row_idx:03d}_c{col_idx:03d}_mask.tif"
+                msk_out = msk_dir / f"{prefix}_r{row_idx:03d}_c{col_idx:03d}{mask_suffix}.tif"
                 with rio.open(msk_out, "w", **msk_profile) as dst:
                     dst.write(msk_data)
  

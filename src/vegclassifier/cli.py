@@ -49,6 +49,19 @@ def cmd_init_config(args):
           f"vegclassifier train --config {out}")
 
 
+def cmd_preprocess(args):
+    from .preprocess import run_preprocess
+    cfg = _load_cfg(args.config)
+    try:
+        run_preprocess(cfg, site=args.site,
+                       image_name=args.image_name, mask_name=args.mask_name,
+                       tile_size=args.tile_size, overlap=args.overlap,
+                       min_valid_fraction=args.min_valid_fraction,
+                       skip_burn=args.skip_burn)
+    except (FileNotFoundError, ValueError) as e:
+        _fail(str(e))
+
+
 def cmd_train(args):
     from .train import run_train
     cfg = _load_cfg(args.config)
@@ -115,6 +128,21 @@ def build_parser():
     c.add_argument("path")
     c.add_argument("--force", action="store_true")
     c.set_defaults(func=cmd_init_config)
+
+    pp = sub.add_parser("preprocess",
+                        help="burn masks from shapefiles and cut training tiles")
+    pp.add_argument("--config", required=True)
+    pp.add_argument("--site", required=True, help="e.g. middle or south")
+    pp.add_argument("--image-name", help="filename in paths.image_dir "
+                                         "(default: <site>_winter2025.tif)")
+    pp.add_argument("--mask-name", help="output mask filename in paths.image_dir "
+                                        "(default: <site>_mask.tif)")
+    pp.add_argument("--tile-size", type=int, default=1024)
+    pp.add_argument("--overlap", type=int, default=0)
+    pp.add_argument("--min-valid-fraction", type=float, default=0.3)
+    pp.add_argument("--skip-burn", action="store_true",
+                    help="reuse an existing mask instead of re-burning")
+    pp.set_defaults(func=cmd_preprocess)
 
     t = sub.add_parser("train", help="train a model on the training tiles")
     t.add_argument("--config", required=True)

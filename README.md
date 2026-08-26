@@ -16,27 +16,133 @@ Models train on `middle` tiles and are evaluated on the held-out `south` site.
 
 ---
 
+## Setup
+
+The geospatial stack (rasterio, geopandas) depends on GDAL system libraries.
+Install it with conda — pip alone is a common source of setup failures.
+
+```bash
+conda env create -f environment.yml
+conda activate invasives
+pip install -e .          # installs the `vegclassifier` command
+vegclassifier --help
+```
+
+Already have a working geospatial environment? `pip install -e .` on its own is
+enough.
+
+---
+
+## Pointing it at your data
+
+**Nothing about the paths is hardcoded.** Data lives outside the repo; a YAML
+config tells the pipeline where. Start from a copy:
+
+```bash
+cp configs/rf_multiclass.yaml configs/my_run.yaml
+```
+
+Then edit the `paths:` block. Absolute paths are fine and are the safer choice
+if your checkout is not a sibling of the data directories.
+
+```yaml
+paths:
+  image_dir:  /path/to/orthomosaics     # full-resolution GeoTIFFs + masks
+  data_dir:   /path/to/shapefiles       # digitised polygons
+  tile_dir:   /path/to/tiles            # tiles (created by `preprocess`)
+  output_dir: models                    # trained models (inside the repo)
+
+  # How tiles are laid out on disk. Change these to match an existing tile set,
+  # or leave them and let `preprocess` create this structure for you:
+  #   <tile_dir>/<image_subdir>/<site>/<stem>.tif
+  #   <tile_dir>/<mask_subdir>/<site>/<stem><mask_suffix>.tif
+  image_subdir: rgb_images
+  mask_subdir:  class_masks
+  mask_suffix:  _mask
+```
+
+### File naming expectations
+
+| what | expected | how to override |
+|------|----------|-----------------|
+| orthomosaic | `<site>_winter2025.tif` in `image_dir` | `--image-name` |
+| burned mask | `<site>_mask.tif` in `image_dir` | `--mask-name` |
+| polygons | `Phragmites`, `FAV`, `Tule` in `data_dir` (`.geojson`, `.shp`, `.gpkg`, or `.json`; case-insensitive) | rename the files |
+| tiles | `<stem>_r000_c000.tif` + `<stem>_r000_c000_mask.tif` | `mask_suffix` |
+
+`<site>` is whatever you pass to `--site` (here: `middle`, `south`). If your
+files are named differently, pass `--image-name` / `--mask-name` rather than
+renaming your data.
+
+If you already have tiles from another process, skip `preprocess` entirely and
+set `image_subdir` / `mask_subdir` / `mask_suffix` to match what is on disk. Run
+a quick check that discovery finds them:
+
+```bash
+python -c "
+from vegclassifier.config import PipelineConfig
+from vegclassifier.io import discover_pairs
+c = PipelineConfig.from_yaml('configs/my_run.yaml')
+discover_pairs(c.paths.tile_dir, site='middle',
+               image_subdir=c.paths.image_subdir,
+               mask_subdir=c.paths.mask_subdir,
+               mask_suffix=c.paths.mask_suffix)"
+```
+
+---
+
+## Assumptions this pipeline makes
+
+Read this before applying it to a new site. These are baked in, and several are
+research findings rather than arbitrary defaults.
+
+**Fixed by the code**
+
+- **Four classes with fixed meanings:** 0 Background, 1 Phragmites, 2 FAV,
+  3 Tule, 255 nodata. Changing the class scheme means editing `sampling.py` and
+  `io.py`, not a config value.
+- **Three-band RGB uint8 input.** No NIR, no multispectral.
+- **Burn priority** when polygons overlap: Phragmites > FAV > Tule > Background.
+- **Non-vegetation rule:** Value < 0.35 AND Saturation < 0.35 is treated as
+  non-vegetated and forced to Background at inference. Tune per site in
+  `features.nonveg_*`.
+- **Tiles train; full images predict.** Prediction and evaluation always read
+  the full orthomosaic (see below).
+
+**Validated for this site — re-check before trusting elsewhere**
+
+- **The 4-feature stack** (Hue, Saturation, Entropy(Sat, R=61 px),
+  GLCM-Contrast(Sat, 21 px)) was selected for these species at 0.1 m/px. The
+  radii are physical scales (~6.1 m and ~2.1 m); at a different resolution they
+  describe different real-world sizes.
+- **Identity normalization** won 28 of 36 channel x pair combinations here.
+- **Erosion of 10 px (~1 m)** removes ambiguous polygon boundaries. Larger
+  values silently delete small polygons entirely.
+- **Sampling cap of 2000 px per class per tile.**
+
+**A different site or sensor needs revalidation, not just a new config.** The
+feature study lives in the `InvasivePlantDetection` notebooks (`02_B`); rerun it
+before assuming these features transfer.
+
+---
+
 ## Runbook
 
 Copy-paste these. Four commands cover everything.
 
-### 0. Install (once)
+### 1. Preprocess — burn masks and cut tiles
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -e .
-vegclassifier --help
+vegclassifier preprocess --config configs/my_run.yaml --site middle
+vegclassifier preprocess --config configs/my_run.yaml --site south
 ```
 
-### 1. Create a config
+Burns `Phragmites` / `FAV` / `Tule` polygons into a mask aligned to the
+orthomosaic, then tiles image and mask into `tile_dir`. Useful flags:
+`--tile-size` (default 1024), `--min-valid-fraction` (default 0.3, drops
+mostly-nodata tiles), and `--skip-burn` to reuse an existing mask.
 
-```bash
-vegclassifier init-config configs/my_run.yaml
-```
-
-Open it and set `paths.tile_dir`, `paths.image_dir`, and `paths.output_dir`.
-Everything else is already at the values validated in the notebooks.
+Already have masks and tiles? Skip this step.
 
 ### 2. Train
 
@@ -147,13 +253,14 @@ One YAML fully defines a run. Key locked values (from `02_B` / `03_B`):
 
 ```
 src/vegclassifier/
-├── io.py         # tile loading, mask burning, tiling
+├── io.py         # tile loading, mask burning, tiling, tile discovery
 ├── features.py   # HSV, entropy, GLCM contrast, 4-feature stack
 ├── sampling.py   # non-veg mask, erosion, scope remap, per-tile sampling
 ├── metrics.py    # metrics, confusion matrix, per-class error coding
 ├── config.py     # YAML config dataclasses + validation
 ├── models.py     # 4 algorithms behind one interface + save/load
 ├── raster.py     # windowed full-image inference (halo, phase alignment)
+├── preprocess.py # mask burning + tiling
 ├── train.py      # training stage
 ├── predict.py    # prediction stage
 ├── evaluate.py   # evaluation stage
