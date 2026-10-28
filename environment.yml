@@ -41,4 +41,7 @@ dependencies:
   - matplotlib >=3.7
   - jupyterlab
 
+  # tests
+  - pytest >=7.0
+
   - pip
