@@ -10,9 +10,7 @@ Defaults are locked to 03_B cell 1. Normalization defaults to identity
 `normalization` block.
 """
 
-from dataclasses import dataclass, field, asdict
-from pathlib import Path
-from typing import List, Optional
+from dataclasses import asdict, dataclass, field
 
 import yaml
 
@@ -24,8 +22,8 @@ VALID_ALGOS  = ("gm", "gmm", "rf", "svm")
 @dataclass
 class Normalization:
     mode: str = "identity"          # identity | global | per_tile
-    lo: Optional[float] = 0.0       # used by identity; for global, filled at train time
-    hi: Optional[float] = 255.0
+    lo: float | None = 0.0       # used by identity; for global, filled at train time
+    hi: float | None = 255.0
 
 
 @dataclass
@@ -33,7 +31,7 @@ class Features:
     entropy_r: int = 61
     glcm_patch_size: int = 21
     glcm_levels: int = 64
-    glcm_distances: List[int] = field(default_factory=lambda: [1, 3, 5])
+    glcm_distances: list[int] = field(default_factory=lambda: [1, 3, 5])
     nonveg_val_thresh: float = 0.35
     nonveg_sat_thresh: float = 0.35
 
@@ -50,7 +48,7 @@ class Model:
     algo: str = "rf"                # gm | gmm | rf | svm
     # RandomForest
     rf_n_estimators: int = 300
-    rf_max_depth: Optional[int] = None
+    rf_max_depth: int | None = None
     rf_min_samples_leaf: int = 5
     rf_max_features: str = "sqrt"
     rf_class_weight: str = "balanced"

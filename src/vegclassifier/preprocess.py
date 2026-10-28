@@ -15,13 +15,12 @@ Ported from 01_preprocessing.
 """
 
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from .config import PipelineConfig
 from .io import burn_multiclass_mask, tile_image_and_mask
 
 # Shapefile basenames looked for in paths.data_dir, by class.
-DEFAULT_SHAPEFILES: Dict[str, str] = {
+DEFAULT_SHAPEFILES: dict[str, str] = {
     "phragmites": "Phragmites",
     "fav":        "FAV",
     "tule":       "Tule",
@@ -29,7 +28,7 @@ DEFAULT_SHAPEFILES: Dict[str, str] = {
 VECTOR_EXTS = (".geojson", ".shp", ".gpkg", ".json")
 
 
-def find_shapefile(data_dir: Path, basename: str) -> Optional[Path]:
+def find_shapefile(data_dir: Path, basename: str) -> Path | None:
     """
     Locate a vector file by basename, trying common extensions and
     case-insensitive matching. Returns None if not found.
@@ -49,13 +48,13 @@ def find_shapefile(data_dir: Path, basename: str) -> Optional[Path]:
 
 
 def run_preprocess(cfg: PipelineConfig, site: str,
-                   image_name: Optional[str] = None,
-                   mask_name: Optional[str] = None,
+                   image_name: str | None = None,
+                   mask_name: str | None = None,
                    tile_size: int = 1024,
                    overlap: int = 0,
                    min_valid_fraction: float = 0.3,
                    skip_burn: bool = False,
-                   verbose: bool = True) -> List:
+                   verbose: bool = True) -> list:
     """
     Burn a multiclass mask for one site and tile it for training.
 
@@ -109,8 +108,8 @@ def run_preprocess(cfg: PipelineConfig, site: str,
                 f"  Looked for: "
                 + ", ".join(f"{v}{{{'|'.join(VECTOR_EXTS)}}}"
                             for v in DEFAULT_SHAPEFILES.values()) + "\n"
-                f"  Set paths.data_dir, or pass --skip-burn to reuse an "
-                f"existing mask."
+                "  Set paths.data_dir, or pass --skip-burn to reuse an "
+                "existing mask."
             )
         if verbose:
             print(f"Burning mask for '{site}' from {data_dir}")

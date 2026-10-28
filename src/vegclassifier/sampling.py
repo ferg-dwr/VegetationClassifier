@@ -9,7 +9,6 @@ package. `SCOPES`, `remap_mask_for_scope`, and `collect_tile_samples` reproduce
 the scope-partitioning logic from 03_B (cells 1, 7, 9/13).
 """
 
-from typing import Dict, List
 
 import numpy as np
 from scipy.ndimage import binary_erosion
@@ -23,7 +22,7 @@ ALL_CLASSES = [BACKGROUND, PHRAGMITES, FAV, TULE]
 
 # Classification scopes — locked in 03_B cell 1.
 # label_map: original class (0..3) -> new label, or -1 to exclude from the scope.
-SCOPES: Dict[str, Dict] = {
+SCOPES: dict[str, dict] = {
     "binary": {
         "classes":     [0, 1],
         "label_map":   {0: 0, 1: 1, 2: -1, 3: -1},   # exclude FAV + Tule
@@ -82,7 +81,7 @@ def remap_mask_for_scope(mask_int: MaskArray, scope: str) -> MaskArray:
 
 def collect_tile_samples(X_flat: np.ndarray, nonveg: BoolArray,
                          mask_eroded: MaskArray, scope: str,
-                         max_px_per_tile: int, rng) -> Dict[int, np.ndarray]:
+                         max_px_per_tile: int, rng) -> dict[int, np.ndarray]:
     """
     Sample up to max_px_per_tile vegetated pixels per (remapped) class from one
     tile, for a given scope. Faithful to 03_B cell 7.
@@ -103,7 +102,7 @@ def collect_tile_samples(X_flat: np.ndarray, nonveg: BoolArray,
     label_map = SCOPES[scope]["label_map"]
     veg  = (~nonveg).ravel()
     m    = mask_eroded.ravel()
-    out: Dict[int, List[np.ndarray]] = {}
+    out: dict[int, list[np.ndarray]] = {}
 
     for orig_cls in ALL_CLASSES:
         new_label = label_map.get(orig_cls, -1)

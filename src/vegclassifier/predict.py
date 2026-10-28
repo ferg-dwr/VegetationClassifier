@@ -14,20 +14,25 @@ Inference rules ported from 03_B export_classified_tile:
 """
 
 from pathlib import Path
-from typing import Dict, List
 
 import numpy as np
 import rasterio as rio
 
 from .models import load_model
-from .raster import (block_features, compute_halo, image_valid_mask,
-                     iter_windows, open_like, scope_class_names)
+from .raster import (
+    block_features,
+    compute_halo,
+    image_valid_mask,
+    iter_windows,
+    open_like,
+    scope_class_names,
+)
 
 NODATA = 255
 
 
 def run_predict(model_path, image_path, out_dir, block=1024,
-                save_probabilities=True, verbose=True) -> Dict[str, Path]:
+                save_probabilities=True, verbose=True) -> dict[str, Path]:
     """
     Apply a saved model to one full-resolution image.
 
@@ -47,7 +52,7 @@ def run_predict(model_path, image_path, out_dir, block=1024,
 
     halo = compute_halo(fparams)
     stem = f"{image_path.stem}_{scope}_{meta['kind']}"
-    written: Dict[str, Path] = {}
+    written: dict[str, Path] = {}
 
     with rio.open(image_path) as src:
         if src.count < 3:

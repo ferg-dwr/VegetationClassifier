@@ -48,7 +48,6 @@ Ignored pixels
     from all metric calculations. Pass ignore_label=255 (default).
 """
 
-from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -63,7 +62,7 @@ TULE        = 3
 NODATA      = 255
 ALL_CLASSES = [BACKGROUND, PHRAGMITES, FAV, TULE]
 
-CLASS_NAMES: Dict[int, str] = {
+CLASS_NAMES: dict[int, str] = {
     BACKGROUND: "Background",
     PHRAGMITES: "Phragmites",
     FAV:        "FAV",
@@ -72,7 +71,7 @@ CLASS_NAMES: Dict[int, str] = {
 
 # Default cost weights reflecting the asymmetric cost structure.
 # Tule FPs are the most costly (native species), FAV FPs are least costly.
-DEFAULT_CLASS_WEIGHTS: Dict[int, float] = {
+DEFAULT_CLASS_WEIGHTS: dict[int, float] = {
     BACKGROUND: 1.0,
     PHRAGMITES: 1.5,
     FAV:        0.5,
@@ -83,9 +82,9 @@ DEFAULT_CLASS_WEIGHTS: Dict[int, float] = {
 def compute_metrics(
             y_true:       LabelArray,
             y_pred:       LabelArray,
-            classes:      Optional[List[int]] = None,
+            classes:      list[int] | None = None,
             ignore_label: int                 = NODATA,
-            ) -> Dict[str, Union[float, Dict]] :
+            ) -> dict[str, float | dict] :
     """
     Compute per-class and aggregate metrics from flat label arrays.
 
@@ -154,7 +153,7 @@ def compute_metrics(
 
     accuracy = float((y_true == y_pred).mean()) if n_valid > 0 else 0.0
 
-    per_class: Dict[int, Dict] = {}
+    per_class: dict[int, dict] = {}
     for cls in classes:
         tp = int(((y_pred == cls) & (y_true == cls)).sum())
         fp = int(((y_pred == cls) & (y_true != cls)).sum())
@@ -175,7 +174,7 @@ def compute_metrics(
 
     # Macro average — unweighted mean across classes with support > 0
     active = [c for c in classes if per_class[c]["support"] > 0]
-    macro: Dict[str, float] = {
+    macro: dict[str, float] = {
         "precision": float(np.mean([per_class[c]["precision"] for c in active]))
                      if active else 0.0,
         "recall":    float(np.mean([per_class[c]["recall"]    for c in active]))
@@ -187,7 +186,7 @@ def compute_metrics(
     # Weighted average — support-weighted mean
     total_support = sum(per_class[c]["support"] for c in classes)
     if total_support > 0:
-        weighted: Dict[str, float] = {
+        weighted: dict[str, float] = {
             key: float(sum(
                 per_class[c][key] * per_class[c]["support"]
                 for c in classes
@@ -209,9 +208,9 @@ def compute_metrics(
 def confusion_matrix(
             y_true:       LabelArray,
             y_pred:       LabelArray,
-            classes:      Optional[List[int]] = None,
+            classes:      list[int] | None = None,
             ignore_label: int                 = NODATA,
-            ) -> Tuple[np.ndarray, List[str]] :
+            ) -> tuple[np.ndarray, list[str]] :
     """
     Compute the unnormalised confusion matrix.
 
@@ -247,7 +246,7 @@ def confusion_matrix(
 
     n      = len(classes)
     cm     = np.zeros((n, n), dtype=np.int64)
-    idx    = {cls: i for i, cls in enumerate(classes)}
+    {cls: i for i, cls in enumerate(classes)}
 
     for i, true_cls in enumerate(classes):
         rows = y_true == true_cls
@@ -259,9 +258,9 @@ def confusion_matrix(
 
 
 def aggregate_metrics(
-            tile_metrics: List[Dict],
-            classes:      Optional[List[int]] = None,
-        ) -> Dict[str, Union[float, Dict]] :
+            tile_metrics: list[dict],
+            classes:      list[int] | None = None,
+        ) -> dict[str, float | dict] :
     """
     Aggregate per-tile metric dicts into dataset-level totals.
 
@@ -303,9 +302,9 @@ def aggregate_metrics(
 
     # ── Pooled aggregation ────────────────────────────────────────────────────
     # Sum TP, FP, FN across all tiles per class, then recompute metrics
-    tp_sum: Dict[int, int] = {c: 0 for c in classes}
-    fp_sum: Dict[int, int] = {c: 0 for c in classes}
-    fn_sum: Dict[int, int] = {c: 0 for c in classes}
+    tp_sum: dict[int, int] = {c: 0 for c in classes}
+    fp_sum: dict[int, int] = {c: 0 for c in classes}
+    fn_sum: dict[int, int] = {c: 0 for c in classes}
     n_correct = 0
     n_total   = 0
 
@@ -318,16 +317,16 @@ def aggregate_metrics(
             pre = pc["precision"]
             rec = pc["recall"]
             # Back-calculate TP, FP, FN from precision/recall/support
-            tp  = int(round(rec * sup))
+            tp  = round(rec * sup)
             fn  = sup - tp
-            fp  = int(round(tp / (pre + 1e-9) - tp))
+            fp  = round(tp / (pre + 1e-9) - tp)
             tp_sum[cls] += tp
             fp_sum[cls] += fp
             fn_sum[cls] += fn
         n_correct += int(tm["accuracy"] * tm["n_valid"])
         n_total   += tm["n_valid"]
 
-    pooled_per_class: Dict[int, Dict] = {}
+    pooled_per_class: dict[int, dict] = {}
     for cls in classes:
         tp, fp, fn = tp_sum[cls], fp_sum[cls], fn_sum[cls]
         pre = tp / (tp + fp + 1e-9)
@@ -440,8 +439,8 @@ def bhattacharyya_sep(
 
 
 def weighted_f1(
-            metrics:        Dict,
-            class_weights:  Optional[Dict[int, float]] = None,
+            metrics:        dict,
+            class_weights:  dict[int, float] | None = None,
             ) -> float:
     """
     Compute a cost-weighted F1 score reflecting asymmetric misclassification
@@ -497,8 +496,8 @@ def weighted_f1(
 
 
 def print_metrics(
-            metrics:        Dict,
-            class_weights:  Optional[Dict[int, float]] = None,
+            metrics:        dict,
+            class_weights:  dict[int, float] | None = None,
             title:          str                        = "Metrics",
             ) -> None :
     """

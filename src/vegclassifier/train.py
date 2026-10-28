@@ -11,7 +11,6 @@ Reproduces 03_B cell 7 (single pass, per-scope partition) and cells 18-25 (fit).
 """
 
 from pathlib import Path
-from typing import List, Tuple
 
 import numpy as np
 
@@ -22,7 +21,7 @@ from .models import make_model, save_model
 from .sampling import SCOPES, collect_tile_samples, erode_mask, make_nonveg_mask
 
 
-def select_pairs(cfg: PipelineConfig, site_key: str) -> List[Tuple[Path, Path]]:
+def select_pairs(cfg: PipelineConfig, site_key: str) -> list[tuple[Path, Path]]:
     """Tile pairs for one site, using the layout declared in cfg.paths."""
     return discover_pairs(
         cfg.paths.tile_dir,

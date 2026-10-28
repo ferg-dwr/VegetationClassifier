@@ -56,10 +56,10 @@ CNN readiness
 import math
 from collections import Counter
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
- 
-import numpy as np
+from typing import Union
+
 import geopandas as gpd
+import numpy as np
 import rasterio as rio
 from rasterio.enums import Resampling
 from rasterio.features import rasterize
@@ -67,12 +67,12 @@ from rasterio.windows import Window
 
 # ── Type aliases ──────────────────────────────────────────────────────────────
 PathLike  = Union[str, Path]
-TilePair  = Tuple[Path, Path]       # (image_path, mask_path)
+TilePair  = tuple[Path, Path]       # (image_path, mask_path)
 MaskArray = np.ndarray              # shape (H, W), dtype uint8
 ImgArray  = np.ndarray              # shape (H, W), dtype float32
 
 # ── Class map ─────────────────────────────────────────────────────────────────
-CLASS_MAP: Dict[str, int] = {
+CLASS_MAP: dict[str, int] = {
     "background": 0,
     "phragmites": 1,
     "fav":        2,
@@ -84,9 +84,9 @@ CLASS_MAP: Dict[str, int] = {
 def load_tile(
         image_path: PathLike,
         mask_path:  PathLike,
-        lo:         Optional[float] = None,
-        hi:         Optional[float] = None,
-        ) -> Tuple[ImgArray,
+        lo:         float | None = None,
+        hi:         float | None = None,
+        ) -> tuple[ImgArray,
                    ImgArray,
                    ImgArray,
                    ImgArray,
@@ -161,7 +161,7 @@ def burn_multiclass_mask(
             output_mask_path: PathLike,
             phrag_shp:        PathLike,
             fav_shp:          PathLike,
-            tule_shp:         Optional[PathLike] = None,
+            tule_shp:         PathLike | None = None,
             ) -> MaskArray :
     """
     Burn Phragmites, FAV, and (optionally) Tule polygons into a single
@@ -202,7 +202,7 @@ def burn_multiclass_mask(
     burned = np.zeros((height, width), dtype=np.uint8)
 
     # Burn in reverse priority — lower priority first so higher overwrites
-    layers: List[Tuple[Optional[PathLike], int, str]] = [
+    layers: list[tuple[PathLike | None, int, str]] = [
         (tule_shp,  CLASS_MAP["tule"],       "Tule"),
         (fav_shp,   CLASS_MAP["fav"],        "FAV"),
         (phrag_shp, CLASS_MAP["phragmites"], "Phragmites"),
@@ -267,13 +267,13 @@ def tile_image_and_mask(
             output_dir:         PathLike,
             tile_size:          int           = 1024,
             overlap:            int           = 0,
-            prefix:             Optional[str] = None,
+            prefix:             str | None = None,
             skip_empty:         bool          = True,
             min_valid_fraction: float         = 0.3,
             image_subdir:       str           = "images",
             mask_subdir:        str           = "masks",
             mask_suffix:        str           = "_mask",
-            ) -> List[TilePair] :
+            ) -> list[TilePair] :
     """
     Tile a full-resolution image and its mask into subtiles.
  
@@ -330,7 +330,7 @@ def tile_image_and_mask(
     if prefix is None:
         prefix = image_path.stem
  
-    written_pairs: List[TilePair] = []
+    written_pairs: list[TilePair] = []
     stride = tile_size  # non-overlapping stride
  
     with rio.open(image_path) as img_src, \
@@ -393,7 +393,7 @@ def tile_image_and_mask(
     return written_pairs
 
 
-def rebuild_pairs(tile_dir: PathLike) -> List[TilePair] :
+def rebuild_pairs(tile_dir: PathLike) -> list[TilePair] :
     """
     Rebuild (image_path, mask_path) pairs from disk after a kernel restart.
 
@@ -415,7 +415,7 @@ def rebuild_pairs(tile_dir: PathLike) -> List[TilePair] :
     img_dir  = tile_dir / "images"
     msk_dir  = tile_dir / "masks"
 
-    pairs: List[TilePair] = []
+    pairs: list[TilePair] = []
     for img_path in sorted(img_dir.glob("*.tif")):
         mask_path = msk_dir / (img_path.stem + "_mask.tif")
         if mask_path.exists():
@@ -426,9 +426,9 @@ def rebuild_pairs(tile_dir: PathLike) -> List[TilePair] :
 
 
 def compute_dataset_stats(
-            pairs:    List[TilePair],
-            sample_n: Optional[int] = None,
-            ) -> Dict[str, float] :
+            pairs:    list[TilePair],
+            sample_n: int | None = None,
+            ) -> dict[str, float] :
     """
     Compute dataset-wide per-channel statistics across all tile pairs.
  
@@ -485,7 +485,7 @@ def compute_dataset_stats(
     print(f"Computing dataset statistics over {len(targets)} tiles...")
  
     # Pass 1 — compute global lo/hi from raw pixel values
-    all_vals: List[np.ndarray] = []
+    all_vals: list[np.ndarray] = []
     for img_path, _ in targets:
         with rio.open(img_path) as src:
             data = src.read().astype(np.float32)[:3]
@@ -497,8 +497,8 @@ def compute_dataset_stats(
     del flat, all_vals
  
     # Pass 2 — compute per-channel mean/std in normalised [0, 1] space
-    sums:  Dict[int, float] = {0: 0.0, 1: 0.0, 2: 0.0}
-    sums2: Dict[int, float] = {0: 0.0, 1: 0.0, 2: 0.0}
+    sums:  dict[int, float] = {0: 0.0, 1: 0.0, 2: 0.0}
+    sums2: dict[int, float] = {0: 0.0, 1: 0.0, 2: 0.0}
     count: int = 0
  
     for img_path, _ in targets:
@@ -515,7 +515,7 @@ def compute_dataset_stats(
     stds  = {c: np.sqrt(max(sums2[c] / count - means[c] ** 2, 0.0))
              for c in range(3)}
  
-    stats: Dict[str, float] = {
+    stats: dict[str, float] = {
         "lo":     lo,
         "hi":     hi,
         "mean_r": means[0],
@@ -533,9 +533,9 @@ def compute_dataset_stats(
     return stats
 
 def class_balance(
-            pairs:    List[TilePair],
-            sample_n: Optional[int] = None,
-            ) -> Dict[int, int] :
+            pairs:    list[TilePair],
+            sample_n: int | None = None,
+            ) -> dict[int, int] :
     """
     Compute class pixel counts across a list of (image, mask) tile pairs.
 
@@ -554,7 +554,7 @@ def class_balance(
         Keys: 0 (background), 1 (Phragmites), 2 (FAV), 3 (Tule), 255 (nodata).
     """
     counts:  Counter        = Counter()
-    targets: List[TilePair] = pairs[:sample_n] if sample_n else pairs
+    targets: list[TilePair] = pairs[:sample_n] if sample_n else pairs
  
     for _, mask_path in targets:
         with rio.open(mask_path) as src:
@@ -587,11 +587,11 @@ def class_balance(
 
 def discover_pairs(
             tile_dir:   PathLike,
-            site:       Optional[str] = None,
+            site:       str | None = None,
             image_subdir: str = "rgb_images",
             mask_subdir:  str = "class_masks",
             mask_suffix:  str = "_mask",
-            ) -> List[TilePair] :
+            ) -> list[TilePair] :
     """
     Find (image, mask) tile pairs, supporting site-nested layouts.
 
@@ -647,8 +647,8 @@ def discover_pairs(
         # mirror the image's relative subpath on the mask side
         msk_dir_for = lambda p: msk_root / p.parent.relative_to(img_root)
 
-    pairs: List[TilePair] = []
-    missing_masks: List[str] = []
+    pairs: list[TilePair] = []
+    missing_masks: list[str] = []
     for img_path in img_paths:
         mask_path = msk_dir_for(img_path) / f"{img_path.stem}{mask_suffix}.tif"
         if mask_path.exists():

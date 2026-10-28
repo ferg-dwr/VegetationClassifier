@@ -16,8 +16,8 @@ bundle, so they never depend on notebook globals.
 Faithful ports of 03_B cells 18-25 (GM, GMM, RF, SVM).
 """
 
-from typing import Dict, List
 
+import joblib
 import numpy as np
 from scipy.stats import multivariate_normal
 from sklearn.ensemble import RandomForestClassifier
@@ -25,7 +25,6 @@ from sklearn.mixture import GaussianMixture
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
-import joblib
 
 _LOG_FLOOR = 1e-30
 
@@ -33,7 +32,7 @@ _LOG_FLOOR = 1e-30
 class _BaseModel:
     kind = "base"
 
-    def __init__(self, classes: List[int]):
+    def __init__(self, classes: list[int]):
         self.classes_ = list(classes)
 
     def predict(self, X):
@@ -197,7 +196,7 @@ class SVMModel(_SklearnModel):
 _REGISTRY = {"gm": GaussianModel, "gmm": GMMModel, "rf": RFModel, "svm": SVMModel}
 
 
-def make_model(model_cfg, scope_classes: List[int], seed: int) -> _BaseModel:
+def make_model(model_cfg, scope_classes: list[int], seed: int) -> _BaseModel:
     """Build an unfitted model wrapper from a config.Model and scope classes."""
     algo = model_cfg.algo
     if algo == "gm":

@@ -24,7 +24,7 @@ halo are therefore forced to multiples of the stride so every window's local
 grid coincides with one global grid.
 """
 
-from typing import Dict, Iterator, List, Tuple
+from collections.abc import Iterator
 
 import numpy as np
 import rasterio as rio
@@ -35,10 +35,10 @@ from .sampling import make_nonveg_mask
 
 NODATA = 255
 
-CLASS_NAMES: Dict[int, str] = {0: "Background", 1: "Phragmites", 2: "FAV", 3: "Tule"}
+CLASS_NAMES: dict[int, str] = {0: "Background", 1: "Phragmites", 2: "FAV", 3: "Tule"}
 
 
-def scope_class_names(scope: str, classes: List[int]) -> Dict[int, str]:
+def scope_class_names(scope: str, classes: list[int]) -> dict[int, str]:
     """Human-readable names for a scope's label space (merged folds Tule into BG)."""
     if scope == "merged":
         return {c: ("BG+Tule" if c == 0 else CLASS_NAMES[c]) for c in classes}
@@ -50,7 +50,7 @@ def glcm_stride(glcm_patch_size: int) -> int:
     return max(1, (glcm_patch_size // 2) // 2)
 
 
-def compute_halo(feature_params: Dict, erode_px: int = 0) -> int:
+def compute_halo(feature_params: dict, erode_px: int = 0) -> int:
     """
     Context margin needed so windowed features match whole-image features.
 
@@ -65,7 +65,7 @@ def compute_halo(feature_params: Dict, erode_px: int = 0) -> int:
 
 
 def iter_windows(H: int, W: int, block: int, halo: int
-                 ) -> Iterator[Tuple[Window, Window, Tuple[slice, slice]]]:
+                 ) -> Iterator[tuple[Window, Window, tuple[slice, slice]]]:
     """
     Yield (write_window, read_window, crop) covering the raster.
 
@@ -87,7 +87,7 @@ def iter_windows(H: int, W: int, block: int, halo: int
             )
 
 
-def normalise_block(arr_u8: np.ndarray, lo, hi) -> Tuple[np.ndarray, ...]:
+def normalise_block(arr_u8: np.ndarray, lo, hi) -> tuple[np.ndarray, ...]:
     """
     Apply the model's normalisation to a (3, h, w) uint8 block -> r, g, b floats.
 
@@ -129,7 +129,7 @@ def open_like(path, src, count: int, dtype: str, nodata=None):
     )
 
 
-def block_features(rgb_block: np.ndarray, norm: Dict, feature_params: Dict):
+def block_features(rgb_block: np.ndarray, norm: dict, feature_params: dict):
     """
     Normalise a (3, h, w) uint8 block and build the 4-feature stack.
 

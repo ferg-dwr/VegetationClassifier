@@ -18,7 +18,6 @@ including the strided-GLCM-then-uniform_filter behaviour, which is deliberate
 (it is what was validated) and reproduced exactly.
 """
 
-from typing import Dict, List, Tuple
 
 import numpy as np
 from scipy.ndimage import uniform_filter
@@ -121,8 +120,8 @@ def glcm_contrast_map(channel, patch_size=21, levels=64,
     acc, n_off = np.zeros(RR.shape, dtype=np.float64), 0
     for d in distances:
         for a in angles:
-            dr = int(round(d * np.sin(a)))
-            dc = int(round(d * np.cos(a)))
+            dr = round(d * np.sin(a))
+            dc = round(d * np.cos(a))
 
             D   = np.zeros((H, W), dtype=np.float64)
             r0s, r1s = max(0, -dr), min(H, H - dr)
@@ -148,7 +147,7 @@ def glcm_contrast_map(channel, patch_size=21, levels=64,
     return uniform_filter(out, size=stride * 2 + 1)
 
 
-def feature_names(entropy_r: int, glcm_patch_size: int) -> List[str]:
+def feature_names(entropy_r: int, glcm_patch_size: int) -> list[str]:
     """Canonical names for the locked 4-feature stack."""
     return [
         "Hue", "Saturation",
@@ -157,7 +156,7 @@ def feature_names(entropy_r: int, glcm_patch_size: int) -> List[str]:
     ]
 
 
-def build_feature_stack(r, g, b, fcfg: Dict) -> Tuple[np.ndarray, List[str]]:
+def build_feature_stack(r, g, b, fcfg: dict) -> tuple[np.ndarray, list[str]]:
     """
     Build the locked 4-feature stack from normalised RGB channels.
 

@@ -34,3 +34,4 @@ venv/
 .vscode/
 .idea/
 *.swp*:Zone.Identifier
+outputs/

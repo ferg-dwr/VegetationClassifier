@@ -16,22 +16,26 @@ the result is exact — identical to scoring the whole image at once.
 """
 
 from pathlib import Path
-from typing import Dict, List
 
 import numpy as np
 import rasterio as rio
 
 from .metrics import MISCLASS_CODES, per_class_error_map
 from .models import load_model
-from .raster import (block_features, compute_halo, iter_windows, open_like,
-                     scope_class_names)
+from .raster import (
+    block_features,
+    compute_halo,
+    iter_windows,
+    open_like,
+    scope_class_names,
+)
 from .sampling import erode_mask, remap_mask_for_scope
 
 NODATA = 255
 
 
-def metrics_from_confusion(cm: np.ndarray, classes: List[int],
-                           names: Dict[int, str]) -> Dict:
+def metrics_from_confusion(cm: np.ndarray, classes: list[int],
+                           names: dict[int, str]) -> dict:
     """
     Derive per-class and averaged metrics from a pooled confusion matrix.
 
@@ -73,7 +77,7 @@ def metrics_from_confusion(cm: np.ndarray, classes: List[int],
 
 
 def run_evaluate(model_path, image_path, mask_path, out_dir, erode_px=10,
-                 block=1024, write_error_maps=True, verbose=True) -> Dict:
+                 block=1024, write_error_maps=True, verbose=True) -> dict:
     """
     Evaluate a saved model against ground truth on a full-resolution image.
 
@@ -93,7 +97,7 @@ def run_evaluate(model_path, image_path, mask_path, out_dir, erode_px=10,
     halo = compute_halo(fparams, erode_px=erode_px)
     stem = f"{image_path.stem}_{scope}_{meta['kind']}"
     cm   = np.zeros((len(classes), len(classes)), dtype=np.int64)
-    written: Dict[str, Path] = {}
+    written: dict[str, Path] = {}
 
     with rio.open(image_path) as src, rio.open(mask_path) as msk:
         if (msk.height, msk.width) != (src.height, src.width):
