@@ -20,6 +20,7 @@ import rasterio as rio
 
 from .models import load_model
 from .raster import (
+    align_block,
     block_features,
     compute_halo,
     image_valid_mask,
@@ -50,7 +51,8 @@ def run_predict(model_path, image_path, out_dir, block=1024,
     out_dir    = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    halo = compute_halo(fparams)
+    halo  = compute_halo(fparams)
+    block = align_block(block, fparams)
     stem = f"{image_path.stem}_{scope}_{meta['kind']}"
     written: dict[str, Path] = {}
 

@@ -45,6 +45,9 @@ cp configs/rf_multiclass.yaml configs/my_run.yaml
 Then edit the `paths:` block. Absolute paths are fine and are the safer choice
 if your checkout is not a sibling of the data directories.
 
+**Run every command from the repo root.** Relative paths in the config resolve
+against the directory you run `vegclassifier` from, not against the config file.
+
 ```yaml
 paths:
   image_dir:  /path/to/orthomosaics     # full-resolution GeoTIFFs + masks
@@ -147,13 +150,14 @@ Already have masks and tiles? Skip this step.
 ### 2. Train
 
 ```bash
-vegclassifier train --config configs/rf_multiclass.yaml
+vegclassifier train --config configs/my_run.yaml
 ```
 
-Writes `models/multiclass_rf.joblib`. Override the config without editing it:
+Trains on the `middle` tiles and writes `models/multiclass_rf.joblib`. Override
+the config without editing it:
 
 ```bash
-vegclassifier train --config configs/rf_multiclass.yaml --scope binary --algo svm
+vegclassifier train --config configs/my_run.yaml --scope binary --algo svm
 ```
 
 ### 3. Predict on imagery
@@ -161,7 +165,7 @@ vegclassifier train --config configs/rf_multiclass.yaml --scope binary --algo sv
 ```bash
 vegclassifier predict \
   --model models/multiclass_rf.joblib \
-  --image data/imagery/south_winter2025.tif \
+  --image /path/to/orthomosaics/south_winter2025.tif \
   --out   outputs/predictions
 ```
 
@@ -177,8 +181,8 @@ No ground-truth mask needed. Works on any new flight.
 ```bash
 vegclassifier evaluate \
   --model models/multiclass_rf.joblib \
-  --image data/imagery/south_winter2025.tif \
-  --mask  data/imagery/south_mask.tif \
+  --image /path/to/orthomosaics/south_winter2025.tif \
+  --mask  /path/to/orthomosaics/south_mask.tif \
   --out   outputs/evaluation \
   --json  outputs/evaluation/metrics.json
 ```
@@ -214,13 +218,18 @@ site. Two reasons this is not negotiable:
 
 Full-image inference processes windows with a **halo** of context, computing
 features on a padded block and writing only the valid interior. Block size and
-halo are forced to multiples of the GLCM stride so the co-occurrence grid stays
-phase-aligned across windows.
+halo are rounded up to multiples of the GLCM stride (5 px at the default 21 px
+patch) so the co-occurrence grid stays phase-aligned across windows. The
+default `--block 1024` therefore runs as 1025; the log prints the value used.
 
-*Verified:* output is bit-identical whether processed as one window or 25
-(`--block 64` vs `--block 1024`) — zero differing pixels, zero probability
-difference, identical confusion matrices. Tune `--block` for memory only; it
-cannot change results.
+*Verified (synthetic data, 2026-10-28):* class and probability rasters are
+bit-identical to a single-window run at `--block` 1024, 64, and 37, including
+on an image whose dimensions are not stride multiples. `evaluate` gives
+identical confusion matrices and error maps at `--block` 1024 and 64. Tune
+`--block` for memory only; it cannot change results.
+
+Versions before this fix did not round the block. At the old default of 1024,
+outputs differed slightly from a single-window run.
 
 ---
 

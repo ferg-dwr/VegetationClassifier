@@ -137,5 +137,6 @@ def run_preprocess(cfg: PipelineConfig, site: str,
     )
     if verbose:
         print(f"\nDone. {len(pairs)} tile pairs written for site '{site}'.")
-        print(f"  Next: vegclassifier train --config <config> --site {site}")
+        print("  Next: preprocess any remaining sites, then "
+              "vegclassifier train --config <config>  (trains on 'middle' by default)")
     return pairs

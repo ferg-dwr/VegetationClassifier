@@ -64,6 +64,18 @@ def compute_halo(feature_params: dict, erode_px: int = 0) -> int:
     return int(np.ceil(need / stride) * stride)
 
 
+def align_block(block: int, feature_params: dict) -> int:
+    """
+    Round a requested block size up to a multiple of the GLCM stride.
+
+    Window origins fall on multiples of the block size. If the block is not a
+    stride multiple, the GLCM grid shifts between windows and output changes
+    with block size. Rounding up keeps every window on one global grid.
+    """
+    stride = glcm_stride(feature_params["glcm_patch_size"])
+    return int(np.ceil(block / stride) * stride)
+
+
 def iter_windows(H: int, W: int, block: int, halo: int
                  ) -> Iterator[tuple[Window, Window, tuple[slice, slice]]]:
     """

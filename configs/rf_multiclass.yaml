@@ -13,8 +13,8 @@
 scope: multiclass
 
 paths:
-  # Data lives OUTSIDE the repo. These are relative to the repo root; adjust if
-  # your checkout sits elsewhere.
+  # Data lives OUTSIDE the repo. Relative paths resolve against the directory
+  # you run vegclassifier from. Run from the repo root, or use absolute paths.
   tile_dir:   ../WinterIsland_2025_Drone_Tiles      # tiles: TRAINING only
   image_dir:  ../WinterIsland_2025_Drone_Imagery    # full orthomosaics: predict + evaluate
   data_dir:   ../WinterIsland_shapefiles

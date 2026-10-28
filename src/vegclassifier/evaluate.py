@@ -23,6 +23,7 @@ import rasterio as rio
 from .metrics import MISCLASS_CODES, per_class_error_map
 from .models import load_model
 from .raster import (
+    align_block,
     block_features,
     compute_halo,
     iter_windows,
@@ -94,7 +95,8 @@ def run_evaluate(model_path, image_path, mask_path, out_dir, erode_px=10,
     image_path, mask_path = Path(image_path), Path(mask_path)
     out_dir = Path(out_dir); out_dir.mkdir(parents=True, exist_ok=True)
 
-    halo = compute_halo(fparams, erode_px=erode_px)
+    halo  = compute_halo(fparams, erode_px=erode_px)
+    block = align_block(block, fparams)
     stem = f"{image_path.stem}_{scope}_{meta['kind']}"
     cm   = np.zeros((len(classes), len(classes)), dtype=np.int64)
     written: dict[str, Path] = {}
@@ -109,6 +111,7 @@ def run_evaluate(model_path, image_path, mask_path, out_dir, erode_px=10,
         if verbose:
             print(f"Evaluating {image_path.name}  {W}x{H} px  "
                   f"scope={scope} algo={meta['kind']}  erode={erode_px}px")
+            print(f"  halo={halo}px, block={block}px")
 
         dst_err = {}
         if write_error_maps:

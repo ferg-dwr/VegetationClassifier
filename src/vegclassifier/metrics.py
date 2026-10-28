@@ -246,7 +246,6 @@ def confusion_matrix(
 
     n      = len(classes)
     cm     = np.zeros((n, n), dtype=np.int64)
-    {cls: i for i, cls in enumerate(classes)}
 
     for i, true_cls in enumerate(classes):
         rows = y_true == true_cls
