@@ -1,39 +1,69 @@
 # VegetationClassifier
 
 Per-pixel classification of invasive and native wetland vegetation from RGB drone
-imagery (0.1 m/px) over Winter Island, CA. Converts the analysis in the
-`InvasivePlantDetection` notebooks into a reproducible, CLI-driven pipeline.
+imagery. Four commands take an orthomosaic and hand-digitised polygons to a
+classified raster, probability rasters, and accuracy metrics.
 
 | value | class | role |
 |-------|-------|------|
 | 0 | Background | water, mud, bare ground, non-target vegetation |
 | 1 | Phragmites | target invasive |
-| 2 | FAV | floating aquatic vegetation — invasive |
+| 2 | FAV | floating aquatic vegetation, invasive |
 | 3 | Tule | native, high protection priority |
 | 255 | nodata | outside flight extent / masked |
 
-Models train on `middle` tiles and are evaluated on the held-out `south` site.
+By default, models train on the `middle` site and are evaluated on the held-out
+`south` site.
+
+This README covers installing and running the pipeline. Project context, method
+rationale, data locations, and infrastructure are documented separately.
+
+---
+
+## Requirements
+
+- Python. The rest of these you can learn as you go.
+- [Miniforge](https://github.com/conda-forge/miniforge) (conda with the
+  conda-forge channel). See the
+  [conda user guide](https://docs.conda.io/projects/conda/en/stable/user-guide/).
+- [git](https://git-scm.com), to clone and update the repo.
+- [QGIS](https://qgis.org), to look at the output rasters. Optional.
+
+Input imagery must be three-band RGB, uint8, as GeoTIFF.
 
 ---
 
 ## Setup
 
 The geospatial stack (rasterio, geopandas) depends on GDAL system libraries.
-Install it with conda — pip alone is a common source of setup failures.
+Install it with conda. pip alone is a common source of setup failures.
 
 ```bash
+git clone https://github.com/ferg-dwr/VegetationClassifier.git
+cd VegetationClassifier
 conda env create -f environment.yml
 conda activate invasives
 pip install -e .          # installs the `vegclassifier` command
 vegclassifier --help
+pytest                    # optional: confirms the install works, ~30 s
 ```
 
 Already have a working geospatial environment? `pip install -e .` on its own is
-enough.
+enough. Add `pip install -e ".[test]"` to get pytest.
+
+### Record the environment
+
+Package versions can change results. Record the exact environment alongside
+each set of outputs:
+
+```bash
+mkdir -p outputs
+conda env export > outputs/environment.lock.yml
+```
 
 ---
 
-## Pointing it at your data
+## Configure a run
 
 **Nothing about the paths is hardcoded.** Data lives outside the repo; a YAML
 config tells the pipeline where. Start from a copy:
@@ -42,23 +72,19 @@ config tells the pipeline where. Start from a copy:
 cp configs/rf_multiclass.yaml configs/my_run.yaml
 ```
 
-Then edit the `paths:` block. Absolute paths are fine and are the safer choice
-if your checkout is not a sibling of the data directories.
+Then edit the `paths:` block. Absolute paths are the safer choice.
 
 **Run every command from the repo root.** Relative paths in the config resolve
 against the directory you run `vegclassifier` from, not against the config file.
 
 ```yaml
 paths:
-  image_dir:  /path/to/orthomosaics     # full-resolution GeoTIFFs + masks
-  data_dir:   /path/to/shapefiles       # digitised polygons
-  tile_dir:   /path/to/tiles            # tiles (created by `preprocess`)
-  output_dir: models                    # trained models (inside the repo)
+  image_dir:  /path/to/orthomosaics     # full-resolution GeoTIFFs; burned masks are written here
+  data_dir:   /path/to/polygons         # digitised class polygons
+  tile_dir:   /path/to/tiles            # temporary tiles (created by `preprocess`)
+  output_dir: models                    # trained models
 
-  # How tiles are laid out on disk. Change these to match an existing tile set,
-  # or leave them and let `preprocess` create this structure for you:
-  #   <tile_dir>/<image_subdir>/<site>/<stem>.tif
-  #   <tile_dir>/<mask_subdir>/<site>/<stem><mask_suffix>.tif
+  # Tile layout that `preprocess` writes and `train` reads. Leave as is.
   image_subdir: rgb_images
   mask_subdir:  class_masks
   mask_suffix:  _mask
@@ -70,82 +96,35 @@ paths:
 |------|----------|-----------------|
 | orthomosaic | `<site>_winter2025.tif` in `image_dir` | `--image-name` |
 | burned mask | `<site>_mask.tif` in `image_dir` | `--mask-name` |
-| polygons | `Phragmites`, `FAV`, `Tule` in `data_dir` (`.geojson`, `.shp`, `.gpkg`, or `.json`; case-insensitive) | rename the files |
-| tiles | `<stem>_r000_c000.tif` + `<stem>_r000_c000_mask.tif` | `mask_suffix` |
+| polygons | `Phragmites`, `FAV`, `Tule` in `data_dir` (`.geojson`, `.shp`, `.gpkg`, or `.json`; case-insensitive) | point `data_dir` at a folder with these names |
 
 `<site>` is whatever you pass to `--site` (here: `middle`, `south`). If your
-files are named differently, pass `--image-name` / `--mask-name` rather than
+imagery is named differently, pass `--image-name` / `--mask-name` rather than
 renaming your data.
 
-If you already have tiles from another process, skip `preprocess` entirely and
-set `image_subdir` / `mask_subdir` / `mask_suffix` to match what is on disk. Run
-a quick check that discovery finds them:
-
-```bash
-python -c "
-from vegclassifier.config import PipelineConfig
-from vegclassifier.io import discover_pairs
-c = PipelineConfig.from_yaml('configs/my_run.yaml')
-discover_pairs(c.paths.tile_dir, site='middle',
-               image_subdir=c.paths.image_subdir,
-               mask_subdir=c.paths.mask_subdir,
-               mask_suffix=c.paths.mask_suffix)"
-```
+Polygon files can be in any CRS. They are reprojected to the orthomosaic's CRS
+when the mask is burned. Each polygon file must have its CRS defined (for a
+shapefile, a `.prj` file).
 
 ---
 
-## Assumptions this pipeline makes
+## Run the pipeline
 
-Read this before applying it to a new site. These are baked in, and several are
-research findings rather than arbitrary defaults.
-
-**Fixed by the code**
-
-- **Four classes with fixed meanings:** 0 Background, 1 Phragmites, 2 FAV,
-  3 Tule, 255 nodata. Changing the class scheme means editing `sampling.py` and
-  `io.py`, not a config value.
-- **Three-band RGB uint8 input.** No NIR, no multispectral.
-- **Burn priority** when polygons overlap: Phragmites > FAV > Tule > Background.
-- **Non-vegetation rule:** Value < 0.35 AND Saturation < 0.35 is treated as
-  non-vegetated and forced to Background at inference. Tune per site in
-  `features.nonveg_*`.
-- **Tiles train; full images predict.** Prediction and evaluation always read
-  the full orthomosaic (see below).
-
-**Validated for this site — re-check before trusting elsewhere**
-
-- **The 4-feature stack** (Hue, Saturation, Entropy(Sat, R=61 px),
-  GLCM-Contrast(Sat, 21 px)) was selected for these species at 0.1 m/px. The
-  radii are physical scales (~6.1 m and ~2.1 m); at a different resolution they
-  describe different real-world sizes.
-- **Identity normalization** won 28 of 36 channel x pair combinations here.
-- **Erosion of 10 px (~1 m)** removes ambiguous polygon boundaries. Larger
-  values silently delete small polygons entirely.
-- **Sampling cap of 2000 px per class per tile.**
-
-**A different site or sensor needs revalidation, not just a new config.** The
-feature study lives in the `InvasivePlantDetection` notebooks (`02_B`); rerun it
-before assuming these features transfer.
-
----
-
-## Runbook
-
-Copy-paste these. Four commands cover everything.
-
-### 1. Preprocess — burn masks and cut tiles
+### 1. Preprocess: burn masks and cut tiles
 
 ```bash
 vegclassifier preprocess --config configs/my_run.yaml --site middle
 vegclassifier preprocess --config configs/my_run.yaml --site south
 ```
 
-Burns `Phragmites` / `FAV` / `Tule` polygons into a mask aligned to the
-orthomosaic, then tiles image and mask into `tile_dir`. Useful flags:
-`--tile-size` (default 1024), `--min-valid-fraction` (default 0.3, drops
-mostly-nodata tiles), and `--skip-burn` to reuse an existing mask.
+Burns the `Phragmites` / `FAV` / `Tule` polygons into a mask aligned to the
+orthomosaic (`<site>_mask.tif` in `image_dir`), then tiles image and mask into
+`tile_dir`. Useful flags: `--tile-size` (default 1024), `--min-valid-fraction`
+(default 0.3, drops mostly-nodata tiles), and `--skip-burn` to reuse an existing
+mask.
 
-Already have masks and tiles? Skip this step.
+When polygons overlap, the higher class wins: Phragmites > FAV > Tule >
+Background.
 
 ### 2. Train
 
@@ -153,12 +132,25 @@ Already have masks and tiles? Skip this step.
 vegclassifier train --config configs/my_run.yaml
 ```
 
-Trains on the `middle` tiles and writes `models/multiclass_rf.joblib`. Override
-the config without editing it:
+Trains on the `middle` tiles and writes `models/<scope>_<algo>.joblib`, here
+`models/multiclass_rf.joblib`. Override the config without editing it:
 
 ```bash
 vegclassifier train --config configs/my_run.yaml --scope binary --algo svm
 ```
+
+| `--scope` | classes |
+|-----------|---------|
+| `binary` | Background, Phragmites (FAV and Tule left out of training) |
+| `multiclass` | Background, Phragmites, FAV, Tule |
+| `merged` | Background + Tule, Phragmites, FAV |
+
+| `--algo` | model |
+|----------|-------|
+| `gm` | per-class Gaussian |
+| `gmm` | Gaussian mixture, 2 components for Background |
+| `rf` | random forest, uses all CPU cores |
+| `svm` | RBF SVM, single-threaded, subsamples above 40,000 training pixels |
 
 ### 3. Predict on imagery
 
@@ -169,12 +161,15 @@ vegclassifier predict \
   --out   outputs/predictions
 ```
 
-Produces, at full source resolution and georeferencing:
+Writes, at full source resolution and georeferencing:
 
-- `<image>_<scope>_<algo>_class.tif` — one band, uint8, class per pixel, nodata 255
-- `<image>_<scope>_<algo>_prob_<Class>.tif` — one float32 raster per class
+- `<image>_<scope>_<algo>_class.tif`: one band, uint8, class per pixel, nodata 255
+- `<image>_<scope>_<algo>_prob_<Class>.tif`: one float32 raster per class
 
 No ground-truth mask needed. Works on any new flight.
+
+Probability rasters are model scores, not calibrated probabilities. Read them as
+relative confidence.
 
 ### 4. Evaluate against ground truth
 
@@ -184,11 +179,11 @@ vegclassifier evaluate \
   --image /path/to/orthomosaics/south_winter2025.tif \
   --mask  /path/to/orthomosaics/south_mask.tif \
   --out   outputs/evaluation \
-  --json  outputs/evaluation/metrics.json
+  --json  outputs/evaluation/metrics_multiclass_rf.json
 ```
 
-Prints pooled precision/recall/F1 per class and writes one misclassification
-raster per class:
+Prints pooled precision/recall/F1 per class, writes the metrics and confusion
+matrix to the JSON file, and writes one misclassification raster per class:
 
 `<image>_<scope>_<algo>_err_<Class>.tif`, coded:
 
@@ -200,63 +195,101 @@ raster per class:
 | 3 | **false negative** |
 | 255 | not scored (nodata or eroded boundary) |
 
-Open in QGIS and style 2 and 3 to see exactly where the model fails.
+Open in QGIS and style 2 and 3 to see where the model fails.
+
+### 5. Clean up
+
+Tiles are temporary. Once training is done, delete them:
+
+```bash
+rm -rf /path/to/tiles        # the tile_dir from your config
+```
+
+Keep the trained models, the burned masks (`evaluate` reads them), the outputs,
+and `environment.lock.yml`.
+
+### Running every scope and algorithm
+
+To compare all twelve combinations on the same tiles, run step 1 once, loop over
+steps 2 and 4, then clean up (step 5):
+
+```bash
+IMG=/path/to/orthomosaics/south_winter2025.tif
+MASK=/path/to/orthomosaics/south_mask.tif
+
+for scope in binary multiclass merged; do
+  for algo in gm gmm rf svm; do
+    vegclassifier train --config configs/my_run.yaml --scope $scope --algo $algo
+    vegclassifier evaluate --model models/${scope}_${algo}.joblib \
+      --image $IMG --mask $MASK --out outputs/evaluation \
+      --json outputs/evaluation/metrics_${scope}_${algo}.json
+  done
+done
+```
+
+---
+
+## Configuration reference
+
+One YAML fully defines a run. Keep the config with the outputs it produced. The
+defaults in `configs/rf_multiclass.yaml` are the values chosen for this project;
+the reasons are in the project documentation.
+
+| key | what it controls |
+|-----|------------------|
+| `scope` | which classes are trained and scored (see table above) |
+| `paths.*` | where inputs are read and outputs written |
+| `normalization.mode`, `lo`, `hi` | how pixel values are scaled before features. Default `identity` (0 to 255) |
+| `features.entropy_r` | entropy window radius, px |
+| `features.glcm_patch_size`, `glcm_levels`, `glcm_distances` | GLCM texture window and settings |
+| `features.nonveg_val_thresh`, `nonveg_sat_thresh` | pixels below both thresholds are treated as non-vegetated and set to Background |
+| `sampling.max_px_per_tile` | max training pixels per class per tile |
+| `sampling.erode_px` | px stripped from polygon edges before training and scoring |
+| `sampling.seed` | random seed. Same seed and config give the same model |
+| `model.algo` and `model.*` | algorithm and its hyperparameters |
+
+Feature radii are in pixels. At a different image resolution they cover a
+different ground distance.
 
 ---
 
 ## Tiles vs. full images
 
-**Tiles are for preprocessing and training only.** Prediction and evaluation read
-the full-resolution orthomosaic directly and emit one raster covering the whole
-site. Two reasons this is not negotiable:
-
-1. **Tiling drops data.** `min_valid_fraction` discards mostly-nodata tiles, so
-   mosaicking tiles would leave holes and not reconstruct the source extent.
-2. **Per-tile features have edge artefacts.** Entropy (R=61 px) and GLCM (21 px)
-   are neighbourhood operations; at a tile border the neighbourhood is truncated
-   and those pixels get wrong values — a visible grid pattern across a mosaic.
-
-Full-image inference processes windows with a **halo** of context, computing
-features on a padded block and writing only the valid interior. Block size and
-halo are rounded up to multiples of the GLCM stride (5 px at the default 21 px
-patch) so the co-occurrence grid stays phase-aligned across windows. The
-default `--block 1024` therefore runs as 1025; the log prints the value used.
-
-*Verified (synthetic data, 2026-10-28):* class and probability rasters are
-bit-identical to a single-window run at `--block` 1024, 64, and 37, including
-on an image whose dimensions are not stride multiples. `evaluate` gives
-identical confusion matrices and error maps at `--block` 1024 and 64. Tune
-`--block` for memory only; it cannot change results.
-
-Versions before this fix did not round the block. At the old default of 1024,
-outputs differed slightly from a single-window run.
+Tiles are for preprocessing and training only. `predict` and `evaluate` read the
+full orthomosaic in windows, each with a margin of context, and write one raster
+covering the whole site. Output does not depend on `--block`. Set it for memory
+only. The block is rounded up to a multiple of the GLCM stride (1024 runs as
+1025); the log prints the value used.
 
 ---
 
-## Configuration
+## Tests
 
-One YAML fully defines a run. Key locked values (from `02_B` / `03_B`):
+```bash
+pytest
+```
 
-- **Features:** Hue, Saturation, Entropy(Sat, R=61 px), GLCM-Contrast(Sat, 21 px).
-  All pairwise correlations < 0.7. Changing these invalidates the feature study.
-- **Normalization:** `identity` (lo=0, hi=255) — won 28 of 36 channel × pair
-  combinations. `per_tile` destroys absolute colour information; avoid it.
-- **Erosion:** 10 px (~1 m) removes ambiguous polygon edges without the
-  small-polygon filtering bias that larger values introduce.
-- **Sampling cap:** 2000 px per class per tile.
+Runs in about 30 seconds on a small synthetic site, so no project data is needed.
+Covers configuration checks, feature and metric functions, and a full
+preprocess → train → predict → evaluate run. Checks that results do not change
+with `--block` and that retraining with the same config gives the same model.
+Synthetic results say nothing about model accuracy.
 
-## Scopes
+Run the tests after any code change.
 
-| scope | classes | rationale |
-|-------|---------|-----------|
-| `binary` | BG, Phragmites | simplest detection case |
-| `multiclass` | BG, Phragmites, FAV, Tule | full 4-class |
-| `merged` | BG+Tule, Phragmites, FAV | Tule and BG are both "no treatment" |
+---
 
-## Algorithms
+## Common errors
 
-`gm` (per-class Gaussian), `gmm` (Background bimodal, 2 components), `rf`
-(RandomForest, parallel), `svm` (RBF, single-threaded, subsamples above 40k).
+| message | likely cause |
+|---------|--------------|
+| `Config file not found` | not running from the repo root, or wrong `--config` path |
+| `Source image not found` | `paths.image_dir` is wrong, or the file is not named `<site>_winter2025.tif` (use `--image-name`) |
+| `No Phragmites or FAV vector file found` | `paths.data_dir` is wrong, or the polygon files are named differently |
+| `No image/mask tile pairs found` | `preprocess` has not been run for that site, or `paths.tile_dir` changed |
+| `Scope ... expects classes ... but no samples were collected` | a class is missing from the training tiles, or `sampling.erode_px` removed small polygons |
+
+---
 
 ## Package layout
 
@@ -268,54 +301,11 @@ src/vegclassifier/
 ├── metrics.py    # metrics, confusion matrix, per-class error coding
 ├── config.py     # YAML config dataclasses + validation
 ├── models.py     # 4 algorithms behind one interface + save/load
-├── raster.py     # windowed full-image inference (halo, phase alignment)
+├── raster.py     # windowed full-image inference
 ├── preprocess.py # mask burning + tiling
 ├── train.py      # training stage
 ├── predict.py    # prediction stage
 ├── evaluate.py   # evaluation stage
 └── cli.py        # subcommands
+tests/            # pytest suite on synthetic data
 ```
-
-## Performance
-
-GLCM contrast was 92% of feature-extraction runtime (40,401 `graycomatrix` calls
-per 1024x1024 tile). It is now computed by a vectorised route:
-
-> GLCM contrast = SUM (i-j)^2 P(i,j). Since P is the normalised co-occurrence
-> count, that sum is exactly the mean squared difference between pixel pairs at
-> the offset — so squaring one shifted difference image and taking integral-image
-> box sums gives every patch mean in O(1), with no co-occurrence matrix.
-
-*Verified bit-identical* to the original loop (`glcm_contrast_map_reference`,
-retained as the oracle): max absolute difference 0.0 at 256/512/1024 px, square
-and non-square, across parameter sets, and on whole feature matrices.
-
-| | before | after |
-|---|---|---|
-| GLCM, 1024x1024 tile | 25.4 s | 0.52 s (~49x) |
-| Full feature stack per tile | ~32.4 s | ~3.3 s |
-| 116-tile training pass | ~63 min | ~7 min |
-
-Entropy (R=61) is now the largest remaining cost at ~2.6 s/tile.
-
-To re-verify equivalence after any change:
-
-```python
-from vegclassifier.features import glcm_contrast_map, glcm_contrast_map_reference
-import numpy as np
-ch = np.random.default_rng(0).random((256, 256)).astype(np.float32)
-assert np.array_equal(glcm_contrast_map(ch), glcm_contrast_map_reference(ch))
-```
-
-## Known limitations
-
-Carried from the analysis; see `CAVEATS.md` in the notebook project.
-
-- **RGB only, no NIR.** The Phragmites/FAV confusion is largely a sensor
-  limitation, not a modelling one.
-- **Tule is concentrated in 6 training tiles.** Tule performance claims are weakly
-  supported at the training site.
-- **Single date (June 2025).** No phenological variation; generalization to other
-  seasons is untested.
-- **RandomForest `predict_proba` is not calibrated.** Treat probability rasters as
-  relative confidence, not true probabilities, unless validated on held-out data.
